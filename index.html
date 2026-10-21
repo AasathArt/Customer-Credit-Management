@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Green View">
+<meta name="theme-color" content="#047857">
+<title>Green View — Customer Credit Manager</title>
+<style>
+:root{--g:#065f46;--g2:#047857;--bg:#f7f6f2;--c:#fff;--t:#1c1917;--m:#78716c;--b:#e7e5e4;--r:#b91c1c;--a:#b45309;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141412;--c:#1f1e1b;--t:#f5f5f4;--m:#a8a29e;--b:#35332f;--g:#34d399;--g2:#10b981;--r:#f87171;--a:#fbbf24;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#141412;--c:#1f1e1b;--t:#f5f5f4;--m:#a8a29e;--b:#35332f;--g:#34d399;--g2:#10b981;--r:#f87171;--a:#fbbf24;color-scheme:dark}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--t);font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:84px}
+header{background:var(--g2);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+header b{letter-spacing:.12em}header small{display:block;opacity:.85}
+#app{padding:14px;max-width:640px;margin:auto}
+.card{background:var(--c);border:1px solid var(--b);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.k{font-size:12px;color:var(--m)}.v{font-size:20px;font-weight:700}
+.r{color:var(--r)}.am{color:var(--a)}.gr{color:var(--g)}
+input,select,textarea,button{font:inherit;width:100%;padding:12px;border-radius:10px;border:1px solid var(--b);background:var(--c);color:var(--t);margin:4px 0 10px}
+button{background:var(--g2);color:#fff;border:0;font-weight:600;min-height:44px;margin:0}button.s{background:transparent;color:var(--g);border:1px solid var(--g)}button.d{background:var(--r)}
+button:disabled{opacity:.5}label{font-size:13px;color:var(--m)}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--b)}.row:last-child{border:0}
+.row>div:first-child{min-width:0}.btns{display:flex;gap:8px}.btns button{flex:1}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--c);border-top:1px solid var(--b);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{background:none;color:var(--m);border-radius:0;font-size:11px;padding:10px 2px;flex:1}nav button.on{color:var(--g)}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px 4px;border-bottom:1px solid var(--b);text-align:left;white-space:nowrap}
+.pill{font-size:11px;padding:2px 8px;border-radius:99px;border:1px solid var(--b)}
+#toast{position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);left:12px;right:12px;padding:12px;border-radius:10px;background:var(--g2);color:#fff;z-index:9;display:none}#toast.e{background:var(--r)}
+@media print{header,nav,.np,#toast{display:none!important}body{background:#fff;color:#000;padding:0}.card{border:0}}
+</style></head><body>
+<header><div style="display:flex;gap:10px;align-items:center"><img src="logo-64.png" alt="" width="36" height="36" style="border-radius:8px"><div><b>GREEN VIEW</b><small>Customer Credit Manager</small></div></div><span id="net" class="pill"></span></header>
+<div id="toast"></div><div id="app"></div>
+<nav class="np" id="nav"></nav>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const uid=()=>crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2);
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const fD=d=>d?new Date(d+'T00:00').toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}):'—';
+const fM=m=>'Rs. '+(m/100).toLocaleString('en-LK',{minimumFractionDigits:m%100?2:0,maximumFractionDigits:2});
+const toMinor=s=>{s=String(s).trim().replace(/,/g,'');if(!/^\d+(\.\d{1,2})?$/.test(s))return null;const[r,c='']=s.split('.');const v=+r*100+ +(c+'00').slice(0,2);return v>0&&Number.isSafeInteger(v)?v:null};
+let db,S={view:'dash',customers:[],ledger:[],audit:[],q:'',cid:null,type:'credit',fid:null,busy:0,from:'',to:''};
+const open=()=>new Promise((ok,no)=>{const r=indexedDB.open('greenview',1);r.onupgradeneeded=()=>{const d=r.result,c=d.createObjectStore('customers',{keyPath:'id'});c.createIndex('name','name');c.createIndex('phone','phone');const l=d.createObjectStore('ledger',{keyPath:'id'});l.createIndex('customerId','customerId');l.createIndex('occurredAt','occurredAt');l.createIndex('entryType','entryType');l.createIndex('cust_date',['customerId','occurredAt']);d.createObjectStore('audit',{keyPath:'id'});d.createObjectStore('settings',{keyPath:'key'})};r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const getAll=s=>new Promise((ok,no)=>{const r=db.transaction(s).objectStore(s).getAll();r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+const tx=(puts,dels=[])=>new Promise((ok,no)=>{const st=[...new Set([...puts,...dels].map(o=>o[0]))],t=db.transaction(st,'readwrite');puts.forEach(([s,v])=>t.objectStore(s).put(v));dels.forEach(([s,k])=>t.objectStore(s).delete(k));t.oncomplete=ok;t.onerror=t.onabort=()=>no(t.error||new Error('Write aborted'))});
+const aud=(action,entityType,entityId,details)=>['audit',{id:uid(),action,entityType,entityId,timestamp:new Date().toISOString(),details}];
+async function load(){[S.customers,S.ledger,S.audit]=await Promise.all([getAll('customers'),getAll('ledger'),getAll('audit')]);S.settings=Object.fromEntries((await getAll('settings')).map(x=>[x.key,x.value]))}
+function toast(m,e){const t=$('#toast');t.textContent=m;t.className=e?'e':'';t.style.display='block';setTimeout(()=>t.style.display='none',3500)}
+// ledger maths (integers only)
+const byId=()=>Object.fromEntries(S.ledger.map(e=>[e.id,e]));
+function eff(e,m){if(e.entryType==='credit')return e.amountMinor;if(e.entryType==='payment')return-e.amountMinor;const o=m[e.reversesEntryId];return o?-eff(o,m):0}
+const sorted=l=>[...l].sort((a,b)=>a.occurredAt.localeCompare(b.occurredAt)||a.createdAt.localeCompare(b.createdAt));
+const ents=cid=>S.ledger.filter(e=>e.customerId===cid);
+function stats(cid){const m=byId();let bal=0,cr=0,pay=0;for(const e of ents(cid)){const x=eff(e,m);bal+=x;if(e.entryType==='credit')cr+=e.amountMinor;if(e.entryType==='payment')pay+=e.amountMinor}return{bal,cr,pay}}
+const cust=id=>S.customers.find(c=>c.id===id);
+const isRev=id=>S.ledger.some(e=>e.reversesEntryId===id);
+function dueState(e){if(e.entryType!=='credit'||!e.dueAt||isRev(e.id))return'';const t=today();return e.dueAt<t?'Overdue':e.dueAt===t?'Due today':'Not yet due'}
+const csv=rows=>rows.map(r=>r.map(c=>{c=String(c??'');return/[",\n\r]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c}).join(',')).join('\r\n');
+// views
+const NAV=[['dash','Dashboard'],['cust','Customers'],['add','Add'],['rep','Reports'],['set','Settings']];
+function go(v,cid){S.view=v;if(cid!==undefined)S.cid=cid;render();scrollTo(0,0)}
+function render(){$('#nav').innerHTML=NAV.map(([k,l])=>`<button class="${S.view===k||(S.view==='ledger'&&k==='cust')?'on':''}" data-a="go" data-v="${k}">${l}</button>`).join('');$('#app').innerHTML=({dash,cust:custV,add,rep,set,ledger,stmt}[S.view])()}
+function dash(){const t=today(),m=byId();let out=0,n=0,tc=0,tp=0;const rows=S.customers.map(c=>({c,...stats(c.id)}));rows.forEach(r=>{out+=r.bal;if(r.bal>0)n++});S.ledger.forEach(e=>{if(e.occurredAt===t){if(e.entryType==='credit')tc+=e.amountMinor;if(e.entryType==='payment')tp+=e.amountMinor}});
+const od=S.ledger.filter(e=>dueState(e)==='Overdue').reduce((a,e)=>a+e.amountMinor,0);
+const top=rows.filter(r=>r.bal>0).sort((a,b)=>b.bal-a.bal).slice(0,5),rec=sorted(S.ledger).reverse().slice(0,6);
+const bk=S.settings.lastBackup;
+return `${!bk||Date.now()-new Date(bk)>7*864e5?`<div class="card am">⚠ ${bk?'Last backup was '+fD(bk.slice(0,10)):'No backup yet'}. Data lives only on this device — back up in Settings.</div>`:''}
+<div class="card"><div class="k">Total outstanding</div><div class="v ${out>0?'r':''}">${fM(out)}</div><div class="k">${n} customer(s) owe money · ${S.customers.filter(c=>c.isActive).length} active${od?` · <span class="r">${fM(od)} overdue</span>`:''}</div></div>
+<div class="grid"><div class="card"><div class="k">Credit today</div><div class="v">${fM(tc)}</div></div><div class="card"><div class="k">Collected today</div><div class="v gr">${fM(tp)}</div></div></div>
+<div class="btns" style="margin-bottom:12px"><button data-a="quick" data-t="credit">Record Credit</button><button class="s" data-a="quick" data-t="payment">Receive Payment</button></div>
+<div class="btns" style="margin-bottom:12px"><button class="s" data-a="go" data-v="cust">Search Customer</button></div>
+<div class="card"><b>Largest balances</b>${top.map(r=>`<div class="row" data-a="open" data-id="${r.c.id}"><span>${esc(r.c.name)}</span><b class="r">${fM(r.bal)}</b></div>`).join('')||'<p class="k">Nothing owed yet. Add a customer, then record a credit.</p>'}</div>
+<div class="card"><b>Recent transactions</b>${rec.map(e=>`<div class="row"><div>${esc(cust(e.customerId)?.name)}<div class="k">${fD(e.occurredAt)} · ${e.entryType}</div></div><b>${fM(e.amountMinor)}</b></div>`).join('')||'<p class="k">No transactions yet.</p>'}</div>`}
+function custV(){const q=S.q.toLowerCase();const l=S.customers.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.phone||'').includes(q)||c.id.toLowerCase().startsWith(q));
+return `<input id="q" placeholder="Search name, phone or ID" value="${esc(S.q)}" data-a="search"><div class="card" id="list">${listH(l)}</div><div class="card"><b>New customer</b><label>Full name *</label><input id="nn"><label>Phone</label><input id="np" inputmode="tel"><label>Address</label><input id="na"><button data-a="addc">Add customer</button></div>`}
+function listH(l){return l.sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{const s=stats(c.id);return `<div class="row" data-a="open" data-id="${c.id}"><div>${esc(c.name)} ${c.isActive?'':'<span class="pill">archived</span>'}<div class="k">${esc(c.phone||'No phone')} · #${c.id.slice(0,6)}</div></div><b class="${s.bal>0?'r':''}">${fM(s.bal)}</b></div>`}).join('')||'<p class="k">No customers found.</p>'}
+function ledger(){const c=cust(S.cid);if(!c)return'';const s=stats(c.id),m=byId();let run=0;
+const rows=sorted(ents(c.id)).map(e=>{const x=eff(e,m);run+=x;const rv=isRev(e.id),ds=dueState(e);return `<tr><td>${fD(e.occurredAt)}</td><td>${e.entryType}${rv?' (reversed)':''}${ds?` <span class="pill ${ds==='Overdue'?'r':''}">${ds}</span>`:''}</td><td>${esc(e.reference||'')}</td><td>${fM(e.amountMinor)}</td><td>${fM(run)}</td><td class="np">${e.entryType!=='reversal'&&!rv?`<a href="#" data-a="rev" data-id="${e.id}">reverse</a>`:''}</td></tr>`}).join('');
+return `<button class="s np" data-a="go" data-v="cust" style="margin-bottom:10px">← Customers</button><div class="card"><b style="font-size:18px">${esc(c.name)}</b><div class="k">${esc(c.phone||'')} ${esc(c.address||'')}</div><div class="k">Outstanding</div><div class="v ${s.bal>0?'r':''}">${fM(s.bal)}</div><div class="k">Credit ${fM(s.cr)} · Paid ${fM(s.pay)} · ${ents(c.id).length} entries</div></div>
+<div class="btns np"><button data-a="quick" data-t="credit" data-id="${c.id}">+ Credit</button><button class="s" data-a="quick" data-t="payment" data-id="${c.id}">Payment</button></div>
+<div class="card tw" style="margin-top:12px"><table><tr><th>Date</th><th>Type</th><th>Ref</th><th>Amount</th><th>Balance</th><th class="np"></th></tr>${rows||'<tr><td colspan=6>No entries.</td></tr>'}</table></div>
+<div class="btns np"><button class="s" data-a="stmt">Statement</button><button class="s" data-a="edit">Edit</button><button class="s" data-a="arch">${c.isActive?'Archive':'Restore'}</button></div>`}
+function stmt(){const c=cust(S.cid),s=stats(c.id),m=byId();let run=0;const rows=sorted(ents(c.id)).map(e=>{run+=eff(e,m);return `<tr><td>${fD(e.occurredAt)}</td><td>${e.entryType}</td><td>${esc(e.reference||e.notes||'')}</td><td>${fM(e.amountMinor)}</td><td>${fM(run)}</td></tr>`}).join('');
+return `<div class="card"><h2 style="margin:0">${esc(S.settings.name||'GREEN VIEW')}</h2><div class="k">Account statement · generated ${fD(today())}</div><p><b>${esc(c.name)}</b><br>${esc(c.phone||'')} ${esc(c.address||'')}</p><div class="tw"><table><tr><th>Date</th><th>Type</th><th>Ref</th><th>Amount</th><th>Balance</th></tr>${rows}</table></div><p>Total credits: ${fM(s.cr)}<br>Total payments: ${fM(s.pay)}<br><b>Outstanding: ${fM(s.bal)}</b></p></div><div class="btns np"><button onclick="print()">Print / Save PDF</button><button class="s" data-a="back">Back</button></div>`}
+function add(){const t=S.type;S.fid=S.fid||uid();const sel=S.cid||'';
+return `<div class="btns" style="margin-bottom:10px"><button class="${t==='credit'?'':'s'}" data-a="type" data-t="credit">Credit</button><button class="${t==='payment'?'':'s'}" data-a="type" data-t="payment">Payment</button></div><div class="card">
+<label>Customer</label><select id="fc" data-a="fcsel"><option value="">Select…</option>${S.customers.filter(c=>c.isActive).map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.name)} (${fM(stats(c.id).bal)})</option>`).join('')}<option value="new">+ New customer…</option></select>
+<div id="nw" style="display:none"><label>New customer name</label><input id="fn"><label>Phone</label><input id="fp" inputmode="tel"></div>
+<label>Date</label><input id="fd" type="date" value="${today()}"><label>Amount (LKR)</label><input id="fa" inputmode="decimal" placeholder="0">
+<label>${t==='credit'?'Bill number':'Receipt / reference'}</label><input id="fr">
+${t==='credit'?`<label>Due date (optional)</label><input id="fdu" type="date" value="${S.settings.period?new Date(Date.now()+S.settings.period*864e5).toISOString().slice(0,10):''}">`:`<label>Method</label><select id="fm"><option>Cash</option><option>Bank Transfer</option><option>Card</option><option>Other</option></select>`}
+<label>Notes</label><input id="fo"><button data-a="save" id="sv">Review &amp; save</button></div>`}
+function rep(){const t=S.ledger.filter(e=>(!S.from||e.occurredAt>=S.from)&&(!S.to||e.occurredAt<=S.to)),m=byId();let c=0,p=0;t.forEach(e=>{const x=eff(e,m);if(e.entryType==='credit')c+=e.amountMinor;if(e.entryType==='payment')p+=e.amountMinor});
+const rows=S.customers.map(x=>({x,...stats(x.id)})).filter(r=>r.bal!==0).sort((a,b)=>b.bal-a.bal);
+return `<div class="card"><label>From</label><input type="date" id="rf" value="${S.from}" data-a="rng"><label>To</label><input type="date" id="rt" value="${S.to}" data-a="rng"><div class="grid"><div><div class="k">Credit</div><b>${fM(c)}</b></div><div><div class="k">Collected</div><b class="gr">${fM(p)}</b></div></div></div>
+<div class="card"><b>Outstanding by customer</b>${rows.map(r=>`<div class="row"><span>${esc(r.x.name)}</span><b>${fM(r.bal)}</b></div>`).join('')||'<p class="k">None.</p>'}<div class="row"><b>Total</b><b>${fM(rows.reduce((a,r)=>a+r.bal,0))}</b></div></div>
+<div class="btns"><button class="s" data-a="csv">Export ledger CSV</button></div>
+<div class="card" style="margin-top:12px"><b>Audit trail</b>${[...S.audit].sort((a,b)=>b.timestamp.localeCompare(a.timestamp)).slice(0,25).map(a=>`<div class="row"><div>${a.action} · ${a.entityType}<div class="k">${a.timestamp.slice(0,16).replace('T',' ')}</div></div></div>`).join('')||'<p class="k">Empty.</p>'}</div>
+<textarea id="csvout" rows="5" style="display:none"></textarea>`}
+function set(){return `<div class="card"><b>Backup</b><p class="k">Everything is stored only in this browser on this device. If the phone is lost, reset or the site data is cleared, records are gone. Copy a backup to a safe place regularly. Backups here are NOT encrypted.</p><div class="k">Last backup: ${S.settings.lastBackup?fD(S.settings.lastBackup.slice(0,10)):'never'}</div><button data-a="exp">Create backup (JSON)</button><textarea id="bk" rows="6" placeholder="Backup JSON appears here — or paste a backup to restore"></textarea><div class="btns"><button class="s" data-a="copy">Copy</button><button class="s" data-a="imp">Restore / merge</button></div></div>
+<div class="card"><b>Business</b><label>Restaurant name</label><input id="sn" value="${esc(S.settings.name||'GREEN VIEW')}"><label>Default credit period (days, blank = none)</label><input id="sp" inputmode="numeric" value="${S.settings.period||''}"><button data-a="ss">Save settings</button></div>
+<div class="card"><b>Demo data</b><p class="k">Production stays empty until you load this.</p><div class="btns"><button class="s" data-a="demo">Load demo</button><button class="s" data-a="undemo">Remove demo</button></div></div>
+<div class="card"><b>Danger zone</b><button class="d" data-a="wipe">Clear all data…</button></div><p class="k">Version 1.0 · no app lock, no encryption, no cloud sync.</p>`}
+// actions
+async function newCust(name,phone,address,notes){const dup=S.customers.find(c=>c.name.toLowerCase()===name.toLowerCase()||(phone&&c.phone===phone));if(dup&&!confirm(`A similar customer exists: ${dup.name} ${dup.phone||''}. Create a separate record anyway?`))return null;const n=new Date().toISOString(),c={id:uid(),name,phone,address:address||'',notes:notes||'',isActive:true,createdAt:n,updatedAt:n};await tx([['customers',c],aud('create','customer',c.id,{name})]);return c}
+const A={
+go:e=>go(e.dataset.v),open:e=>go('ledger',e.dataset.id),back:()=>go('ledger'),stmt:()=>go('stmt'),
+quick:e=>{S.type=e.dataset.t;S.cid=e.dataset.id||'';S.fid=null;go('add')},type:e=>{S.type=e.dataset.t;S.fid=null;render()},
+search:e=>{S.q=e.value;const q=S.q.toLowerCase();$('#list').innerHTML=listH(S.customers.filter(c=>!q||c.name.toLowerCase().includes(q)||(c.phone||'').includes(q)||c.id.startsWith(q)))},
+fcsel:e=>{$('#nw').style.display=e.value==='new'?'block':'none'},
+rng:()=>{S.from=$('#rf').value;S.to=$('#rt').value;render()},
+async addc(){const n=$('#nn').value.trim();if(!n)return toast('Name is required',1);const c=await newCust(n,$('#np').value.trim(),$('#na').value.trim());if(c){await load();toast('Customer saved');render()}},
+async save(){if(S.busy)return;S.busy=1;$('#sv').disabled=true;try{
+ let cid=$('#fc').value;if(!cid)throw new Error('Select a customer');
+ const amt=toMinor($('#fa').value);if(!amt)throw new Error('Enter a valid amount greater than zero');
+ const date=$('#fd').value;if(!date)throw new Error('Choose a date');
+ if(S.ledger.some(e=>e.id===S.fid))throw new Error('Already saved');
+ if(cid==='new'){const n=$('#fn').value.trim();if(!n)throw new Error('New customer needs a name');const c=await newCust(n,$('#fp').value.trim());if(!c){$('#sv').disabled=false;S.busy=0;return}cid=c.id;await load()}
+ const bal=stats(cid).bal,t=S.type;
+ if(t==='payment'&&amt>bal)throw new Error(`Payment exceeds outstanding ${fM(bal)}`);
+ if(t==='credit'&&amt>5e6&&!confirm('Unusually large credit (over Rs. 50,000). Continue?'))throw 0;
+ const nb=t==='credit'?bal+amt:bal-amt;
+ if(!confirm(`${t==='credit'?'Credit':'Payment'} ${fM(amt)} for ${cust(cid).name}\nBalance: ${fM(bal)} → ${fM(nb)}\nSave?`))throw 0;
+ const e={id:S.fid,customerId:cid,entryType:t,amountMinor:amt,occurredAt:date,createdAt:new Date().toISOString(),reference:$('#fr').value.trim(),notes:$('#fo').value.trim(),dueAt:t==='credit'?($('#fdu').value||null):null,reversesEntryId:null,paymentMethod:t==='payment'?$('#fm').value:null,createdBy:'cashier'};
+ await tx([['ledger',e],aud('create','ledger',e.id,{type:t,amountMinor:amt,before:bal,after:nb})]);
+ S.fid=null;await load();toast('Saved. Balance: '+fM(nb));go('ledger',cid)
+}catch(x){if(x)toast(x.message||String(x),1)}finally{S.busy=0;const b=$('#sv');if(b)b.disabled=false}},
+async rev(e,ev){ev.preventDefault();const o=S.ledger.find(x=>x.id===e.dataset.id);if(!o||isRev(o.id))return toast('Already reversed',1);if(!confirm(`Reverse ${o.entryType} of ${fM(o.amountMinor)} dated ${fD(o.occurredAt)}? The original stays on record.`))return;
+ const r={id:uid(),customerId:o.customerId,entryType:'reversal',amountMinor:o.amountMinor,occurredAt:today(),createdAt:new Date().toISOString(),reference:'Reversal of '+o.id.slice(0,8),notes:'',dueAt:null,reversesEntryId:o.id,paymentMethod:null,createdBy:'cashier'};
+ try{await tx([['ledger',r],aud('reverse','ledger',o.id,{reversalId:r.id})]);await load();toast('Reversed');render()}catch(x){toast('Failed: '+x.message,1)}},
+async edit(){const c=cust(S.cid),n=prompt('Name',c.name);if(!n)return;const p=prompt('Phone',c.phone||'')??c.phone,a=prompt('Address',c.address||'')??c.address;try{await tx([['customers',{...c,name:n.trim(),phone:p,address:a,updatedAt:new Date().toISOString()}],aud('update','customer',c.id,{before:c.name})]);await load();render()}catch(x){toast(x.message,1)}},
+async arch(){const c=cust(S.cid);await tx([['customers',{...c,isActive:!c.isActive,updatedAt:new Date().toISOString()}],aud(c.isActive?'archive':'restore','customer',c.id,{})]);await load();render()},
+csv(){const m=byId(),r=[['id','customer','type','date','amount','reference','method','due','reversesId']].concat(sorted(S.ledger).filter(e=>(!S.from||e.occurredAt>=S.from)&&(!S.to||e.occurredAt<=S.to)).map(e=>[e.id,cust(e.customerId)?.name,e.entryType,e.occurredAt,(e.amountMinor/100).toFixed(2),e.reference,e.paymentMethod,e.dueAt,e.reversesEntryId]));const t=$('#csvout');t.style.display='block';t.value=csv(r);t.select();toast('CSV below — copy it')},
+async exp(){const d={app:'greenview',version:1,exportedAt:new Date().toISOString(),customers:S.customers,ledger:S.ledger,audit:S.audit};$('#bk').value=JSON.stringify(d);await tx([['settings',{key:'lastBackup',value:d.exportedAt,updatedAt:d.exportedAt}]]);await load();toast('Backup created — now COPY it somewhere safe')},
+copy(){const t=$('#bk');t.select();try{navigator.clipboard.writeText(t.value);toast('Copied')}catch{toast('Select and copy manually',1)}},
+async imp(){let d;try{d=JSON.parse($('#bk').value);if(d.app!=='greenview'||d.version!==1||!Array.isArray(d.customers)||!Array.isArray(d.ledger))throw 0;
+ const okE=d.ledger.every(e=>e.id&&e.customerId&&['credit','payment','reversal'].includes(e.entryType)&&Number.isSafeInteger(e.amountMinor)&&e.amountMinor>0&&/^\d{4}-\d\d-\d\d$/.test(e.occurredAt)&&e.createdAt);if(!okE||!d.customers.every(c=>c.id&&c.name))throw 0}catch{return toast('Backup is invalid or corrupted. Nothing was changed.',1)}
+ const nc=d.customers.filter(c=>!cust(c.id)),ne=d.ledger.filter(e=>!S.ledger.some(x=>x.id===e.id));
+ if(!confirm(`Merge backup: ${nc.length} new customers, ${ne.length} new entries. Existing records are never overwritten. Continue?`))return;
+ try{await tx([...nc.map(c=>['customers',c]),...ne.map(e=>['ledger',e]),aud('import','backup','-',{customers:nc.length,entries:ne.length})]);await load();toast('Merged');render()}catch(x){toast('Restore failed: '+x.message,1)}},
+async ss(){const p=parseInt($('#sp').value)||0,n=new Date().toISOString();await tx([['settings',{key:'name',value:$('#sn').value||'GREEN VIEW',updatedAt:n}],['settings',{key:'period',value:p,updatedAt:n}]]);await load();toast('Saved')},
+async demo(){if(S.customers.some(c=>(c.notes||'').startsWith('DEMO')))return toast('Demo already loaded',1);const D=[['Anshaf',[['2026-09-11',1000],['2026-10-15',1000]]],['Saneer',[['2026-09-11',1500]]],['Abdullah',[['2026-09-10',400]]],['Farook',[['2026-09-11',1000]]]],p=[],n=new Date().toISOString();for(const[name,l]of D){const c={id:uid(),name,phone:'',address:'',notes:'DEMO/TEST DATA',isActive:true,createdAt:n,updatedAt:n};p.push(['customers',c]);l.forEach(([d,a])=>p.push(['ledger',{id:uid(),customerId:c.id,entryType:'credit',amountMinor:a*100,occurredAt:d,createdAt:n,reference:'',notes:'DEMO',dueAt:null,reversesEntryId:null,paymentMethod:null,createdBy:'demo'}]))}await tx(p);await load();toast('Demo loaded');render()},
+async undemo(){const ids=S.customers.filter(c=>(c.notes||'').startsWith('DEMO')).map(c=>c.id);if(!ids.length||!confirm('Delete demo customers and their entries?'))return;await tx([],[...ids.map(i=>['customers',i]),...S.ledger.filter(e=>ids.includes(e.customerId)).map(e=>['ledger',e.id])]);await load();toast('Demo removed');render()},
+async wipe(){if(prompt('This permanently deletes ALL data. Type DELETE to confirm.')!=='DELETE')return;await tx([],[...S.customers.map(c=>['customers',c.id]),...S.ledger.map(e=>['ledger',e.id]),...S.audit.map(a=>['audit',a.id])]);await load();toast('All data cleared');render()}};
+document.addEventListener('click',e=>{const t=e.target.closest('[data-a]');if(t&&t.tagName!=='INPUT'&&t.tagName!=='SELECT')A[t.dataset.a]?.(t,e)});
+document.addEventListener('input',e=>{if(e.target.dataset.a==='search')A.search(e.target)});
+document.addEventListener('change',e=>{const a=e.target.dataset.a;if(a==='fcsel'||a==='rng')A[a](e.target)});
+const net=()=>{$('#net').textContent=navigator.onLine?'Online':'Offline'};addEventListener('online',net);addEventListener('offline',net);net();
+open().then(d=>{db=d;return load()}).then(render).catch(e=>{$('#app').innerHTML='<div class="card r">Storage unavailable: '+esc(e.message||e)+'. Records cannot be saved in this mode (private browsing?).</div>'});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
+</script></body></html>
